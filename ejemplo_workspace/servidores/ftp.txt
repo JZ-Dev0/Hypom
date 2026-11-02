@@ -1,0 +1,22 @@
+Servidores de la oficina — actualizado en noviembre
+
+@// datos de acceso importantes
+@registro "FTP oficina" ip, user, pass:secreto | orden=pass | copiar=ftp://{user}:{pass}@{ip}
+192.168.1.10 admin 1234
+10.0.0.5 root abcd
+@fin
+
+Claves en formato vertical:
+
+@registro "Router Principal" ip, user, pass | modo=vertical
+192.168.0.1
+admin
+router2026
+
+192.168.0.2
+admin
+repetidor
+@fin
+
+Fin de las notas de servidores.
+

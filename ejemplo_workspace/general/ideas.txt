@@ -1,0 +1,18 @@
+Lista de pendientes y correos:
+
+@tabla "Correos de contacto" correo:email, vence:fecha | orden=vence desc
+ana@gmail.com 03/12
+test@gmail.com 12/11
+luis@gmail.com 28/10
+ 
+@fin
+
+Línea escapada: \@tabla no abre un bloque.
+
+Un correo normal como juan@mail.com nunca se interpreta como bloque.
+
+
+
+@tabla 
+
+@fin

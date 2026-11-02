@@ -1,0 +1,16 @@
+[package]
+name = "hypom-app"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+hypom-core = { path = "../core" }
+hypom-storage = { path = "../storage" }
+eframe = "0.31"
+egui = "0.31"
+egui_extras = "0.31"
+arboard = "3"
+nucleo-matcher = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+anyhow = "1"
+rfd = "0.15"

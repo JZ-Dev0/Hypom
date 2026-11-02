@@ -1,0 +1,11 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# App data
+.app/

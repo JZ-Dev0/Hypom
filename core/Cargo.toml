@@ -1,0 +1,12 @@
+[package]
+name = "hypom-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+thiserror = "2"
+
+[dev-dependencies]
+proptest = "1"
+insta = "1"

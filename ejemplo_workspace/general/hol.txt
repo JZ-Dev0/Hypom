@@ -1,0 +1,11 @@
+@table id, name, value
+1 casa 34
+
+
+@tabla "Nueva tabla" item, valor
+Ejemplo 100
+ 
+@fin
+@tabla id, name, value | orden=name desc
+1 casa 12
+@fin
