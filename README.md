@@ -106,4 +106,7 @@ El binario optimizado se encontrará en `target/release/hypom-app.exe`.
 
 ## 📄 Licencia
 
+Este proyecto está bajo la Licencia MIT. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+
 Desarrollado por **JZ Dev**.
+
