@@ -13,6 +13,7 @@ use crate::clipboard::ClipboardManager;
 pub struct BlockUiState {
     pub editing_cell: Option<(usize, usize)>, // (row_idx, col_idx)
     pub edit_buffer: String,
+    pub focus_edit: bool,
     pub revealed_secrets: HashSet<(usize, usize)>,
 }
 
@@ -21,6 +22,7 @@ impl Default for BlockUiState {
         Self {
             editing_cell: None,
             edit_buffer: String::new(),
+            focus_edit: false,
             revealed_secrets: HashSet::new(),
         }
     }
@@ -63,19 +65,12 @@ fn render_raw_view(ui: &mut Ui, segment: &mut BlockSegment, modified: &mut bool)
         .fill(Color32::from_rgb(24, 26, 32))
         .stroke(Stroke::new(1.0, Color32::from_rgb(60, 65, 78)))
         .show(ui, |ui| {
+            let mut switch_to_table = false;
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Modo Crudo (Texto)").strong().color(Color32::from_rgb(100, 160, 255)));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("✓ Ver como tabla").clicked() {
-                        let parsed_segments = hypom_core::parse::parse_note(&segment.raw);
-                        for seg in parsed_segments {
-                            if let hypom_core::parse::Segment::Block(b) = seg {
-                                segment.parsed = b.parsed;
-                                break;
-                            }
-                        }
-                        segment.state = ViewState::Table;
-                        *modified = true;
+                        switch_to_table = true;
                     }
                 });
             });
@@ -90,6 +85,22 @@ fn render_raw_view(ui: &mut Ui, segment: &mut BlockSegment, modified: &mut bool)
             );
 
             if resp.changed() {
+                *modified = true;
+            }
+
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                switch_to_table = true;
+            }
+
+            if switch_to_table {
+                let parsed_segments = hypom_core::parse::parse_note(&segment.raw);
+                for seg in parsed_segments {
+                    if let hypom_core::parse::Segment::Block(b) = seg {
+                        segment.parsed = b.parsed;
+                        break;
+                    }
+                }
+                segment.state = ViewState::Table;
                 *modified = true;
             }
         });
@@ -141,6 +152,10 @@ fn render_table_view(
 
                     if ui.button("+ Fila").on_hover_text("Agregar nueva fila al bloque").clicked() {
                         add_row(block);
+                        let new_row_idx = block.rows.len() - 1;
+                        ui_state.editing_cell = Some((new_row_idx, 0));
+                        ui_state.edit_buffer = String::new();
+                        ui_state.focus_edit = true;
                         *modified = true;
                     }
                 });
@@ -244,34 +259,72 @@ fn render_table_view(
                                         let is_editing = ui_state.editing_cell == Some((row_idx, col_idx));
 
                                         if is_editing {
-                                            let text_edit = ui.add(
-                                                TextEdit::singleline(&mut ui_state.edit_buffer)
-                                                    .desired_width(f32::INFINITY),
-                                            );
-                                            if text_edit.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                            let text_edit = TextEdit::singleline(&mut ui_state.edit_buffer)
+                                                .desired_width(f32::INFINITY);
+                                            let resp = ui.add(text_edit);
+                                            if ui_state.focus_edit {
+                                                resp.request_focus();
+                                                ui_state.focus_edit = false;
+                                            }
+
+                                            let enter_pressed = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                                            let tab_pressed = ui.input(|i| i.key_pressed(egui::Key::Tab));
+                                            let escape_pressed = ui.input(|i| i.key_pressed(egui::Key::Escape));
+
+                                            if escape_pressed {
+                                                ui_state.editing_cell = None;
+                                            } else if enter_pressed || tab_pressed {
+                                                cell_edited = Some((row_idx, col_idx, ui_state.edit_buffer.clone()));
+                                                // Advance to next column if available
+                                                if col_idx + 1 < num_fields {
+                                                    let next_val = block.rows.get(row_idx)
+                                                        .and_then(|r| r.cells.get(col_idx + 1))
+                                                        .cloned()
+                                                        .unwrap_or_default();
+                                                    ui_state.editing_cell = Some((row_idx, col_idx + 1));
+                                                    ui_state.edit_buffer = next_val;
+                                                    ui_state.focus_edit = true;
+                                                } else {
+                                                    ui_state.editing_cell = None;
+                                                }
+                                            } else if resp.lost_focus() {
                                                 cell_edited = Some((row_idx, col_idx, ui_state.edit_buffer.clone()));
                                                 ui_state.editing_cell = None;
                                             }
                                         } else {
                                             let is_secret = *field_type == FieldType::Secret;
                                             let is_revealed = ui_state.revealed_secrets.contains(&(row_idx, col_idx));
+                                            let is_empty = cell_val.trim().is_empty();
 
                                             let display_str = if is_secret && !is_revealed {
                                                 "••••••••".to_string()
+                                            } else if is_empty {
+                                                "—".to_string()
                                             } else {
                                                 cell_val.clone()
                                             };
 
+                                            let text_color = if is_secret {
+                                                Color32::from_rgb(200, 170, 255)
+                                            } else if is_empty {
+                                                Color32::from_rgb(110, 115, 130)
+                                            } else {
+                                                ui.visuals().text_color()
+                                            };
+
+                                            let mut rt = RichText::new(&display_str).color(text_color);
+                                            if is_empty {
+                                                rt = rt.italics();
+                                            }
+
                                             let label_resp = ui.add(
-                                                egui::Label::new(
-                                                    RichText::new(&display_str)
-                                                        .color(if is_secret { Color32::from_rgb(200, 170, 255) } else { ui.visuals().text_color() })
-                                                ).sense(Sense::click()),
+                                                egui::Label::new(rt).sense(Sense::click()),
                                             );
 
-                                            if label_resp.double_clicked() {
+                                            if label_resp.double_clicked() || (is_empty && label_resp.clicked()) {
                                                 ui_state.editing_cell = Some((row_idx, col_idx));
                                                 ui_state.edit_buffer = cell_val.clone();
+                                                ui_state.focus_edit = true;
                                             } else if label_resp.clicked() {
                                                 if is_secret {
                                                     if is_revealed {
@@ -287,7 +340,11 @@ fn render_table_view(
                                                 }
                                             }
 
-                                            label_resp.on_hover_text("Clic: copiar | Doble clic: editar");
+                                            label_resp.on_hover_text(if is_empty {
+                                                "Clic para editar campo vacío"
+                                            } else {
+                                                "Clic: copiar | Doble clic: editar"
+                                            });
                                         }
                                     });
                                 });
@@ -339,7 +396,7 @@ fn render_table_view(
     }
 }
 
-fn sync_raw_from_block(block: &ParsedBlock) -> String {
+pub fn sync_raw_from_block(block: &ParsedBlock) -> String {
     let mut lines = Vec::new();
 
     // Reconstruct header line

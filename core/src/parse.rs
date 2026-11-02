@@ -64,8 +64,18 @@ pub fn detect_eol(text: &str) -> Eol {
 pub fn parse_note(text: &str) -> Vec<Segment> {
     // Normalize line endings for processing
     let normalized = text.replace("\r\n", "\n");
+    let has_trailing_newline = normalized.ends_with('\n');
     let lines: Vec<&str> = normalized.split('\n').collect();
-    let classified: Vec<LineKind> = lines.iter().map(|l| classify_line(l)).collect();
+    let mut classified: Vec<LineKind> = lines.iter().map(|l| classify_line(l)).collect();
+
+    // If the last line is an incomplete header line (no trailing newline, user still typing),
+    // treat it as plain text until Enter is pressed.
+    if !has_trailing_newline && !lines.is_empty() {
+        let last_idx = lines.len() - 1;
+        if matches!(classified[last_idx], LineKind::Header(_)) {
+            classified[last_idx] = LineKind::Text;
+        }
+    }
 
     let mut segments = Vec::new();
     let mut i = 0;
@@ -495,6 +505,44 @@ mod tests {
                 assert_eq!(b.parsed.rows.len(), 2);
             }
             _ => panic!("Expected block"),
+        }
+    }
+
+    #[test]
+    fn test_incomplete_header_remains_text() {
+        // While typing "@tabla", with no newline, it stays as text
+        let text = "@tabla";
+        let segments = parse_note(text);
+        assert_eq!(segments.len(), 1);
+        match &segments[0] {
+            Segment::Text(t) => assert_eq!(t.text, "@tabla"),
+            _ => panic!("Expected text segment for incomplete header"),
+        }
+
+        // Typing columns without Enter also stays as text
+        let text2 = "@tabla id, nombre, codigo";
+        let segments2 = parse_note(text2);
+        assert_eq!(segments2.len(), 1);
+        match &segments2[0] {
+            Segment::Text(t) => assert_eq!(t.text, "@tabla id, nombre, codigo"),
+            _ => panic!("Expected text segment while typing header without Enter"),
+        }
+    }
+
+    #[test]
+    fn test_complete_header_with_newline_becomes_block() {
+        // Once Enter is pressed (newline appended), it parses as a block
+        let text = "@tabla id, nombre, codigo\n";
+        let segments = parse_note(text);
+        assert_eq!(segments.len(), 1);
+        match &segments[0] {
+            Segment::Block(b) => {
+                assert_eq!(b.parsed.schema.fields.len(), 3);
+                assert_eq!(b.parsed.schema.fields[0].name, "id");
+                assert_eq!(b.parsed.schema.fields[1].name, "nombre");
+                assert_eq!(b.parsed.schema.fields[2].name, "codigo");
+            }
+            _ => panic!("Expected block segment once newline is present"),
         }
     }
 }

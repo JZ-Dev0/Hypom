@@ -269,11 +269,18 @@ impl AppState {
         if let Some(watcher) = &self.watcher {
             while let Ok(event) = watcher.rx.try_recv() {
                 if let WorkspaceEvent::Changed(path) = event {
-                    // If modified externally and we don't have local edits, reload
+                    // Only reload if modified externally and we don't have local edits
                     for note in &mut self.open_notes {
                         if note.path == path && !note.dirty {
-                            if let Ok(reloaded) = load_note(&path) {
-                                *note = reloaded;
+                            if let Ok(metadata) = std::fs::metadata(&path) {
+                                if let Ok(mtime) = metadata.modified() {
+                                    // Only reload if disk file is strictly newer than our saved version
+                                    if mtime > note.disk_mtime {
+                                        if let Ok(reloaded) = load_note(&path) {
+                                            *note = reloaded;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

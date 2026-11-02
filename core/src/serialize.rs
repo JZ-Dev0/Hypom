@@ -18,11 +18,14 @@ pub fn serialize_row(row: &Row, sep: &Separator) -> String {
         .iter()
         .enumerate()
         .map(|(i, cell)| {
-            if matches!(sep, Separator::Space)
-                && cell.contains(' ')
-                && i < row.cells.len() - 1
-            {
-                format!("\"{}\"", cell)
+            if matches!(sep, Separator::Space) {
+                if cell.is_empty() {
+                    "\"\"".to_string()
+                } else if cell.contains(' ') && i < row.cells.len() - 1 {
+                    format!("\"{}\"", cell)
+                } else {
+                    cell.clone()
+                }
             } else {
                 cell.clone()
             }

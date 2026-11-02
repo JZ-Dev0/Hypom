@@ -13,6 +13,7 @@ pub struct Theme {
     pub command_color: Color32,
 }
 
+#[allow(dead_code)]
 impl Theme {
     pub fn dark() -> Self {
         Self {
