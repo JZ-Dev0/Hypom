@@ -13,6 +13,7 @@ Un correo normal como juan@mail.com nunca se interpreta como bloque.
 
 
 
-@tabla 
+@tabla id , name
+
 
 @fin

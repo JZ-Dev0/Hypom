@@ -767,9 +767,10 @@ Un conjunto de notas de ejemplo (correos con fechas, FTP vertical y en fila, par
 **Fin de v1.**
 
 ### Fase 6 — v1.1
-- [ ] `@def` y tipos personalizados.
-- [ ] `@lista`.
-- [ ] Opciones `filtro`, `alerta`, `total`, `unico`, `colapsado`.
+- [x] `@def` y tipos personalizados.
+- [x] `@lista`.
+- [x] Opciones `filtro`, `alerta`, `total`, `unico`, `colapsado`.
+- [x] Detección heurística de pares `clave : valor` sin `@`.
 - [ ] Atajos `Alt+1`…`Alt+9`.
 
 ### Fase 7 — v2

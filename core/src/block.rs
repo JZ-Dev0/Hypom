@@ -7,6 +7,11 @@ use crate::options::Options;
 pub enum BlockKind {
     Tabla,
     Registro,
+    Lista,
+    /// Custom type from `@def name ...`
+    Custom(String),
+    /// Auto-detected key:value groups (no `@` header)
+    Pares,
 }
 
 impl BlockKind {
@@ -14,7 +19,18 @@ impl BlockKind {
         match cmd.to_lowercase().as_str() {
             "tabla" => Some(Self::Tabla),
             "registro" => Some(Self::Registro),
+            "lista" => Some(Self::Lista),
             _ => None,
+        }
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            Self::Tabla => "tabla".to_string(),
+            Self::Registro => "registro".to_string(),
+            Self::Lista => "lista".to_string(),
+            Self::Custom(name) => name.clone(),
+            Self::Pares => "pares".to_string(),
         }
     }
 }
@@ -24,6 +40,8 @@ impl BlockKind {
 pub enum Layout {
     Row,
     Vertical,
+    /// One field per line as `clave : valor` (detected or written)
+    KeyValue,
 }
 
 /// How the block was closed
@@ -35,6 +53,8 @@ pub enum Closing {
     NextBlock,
     /// Closed because the file ended
     EndOfFile,
+    /// Auto-detected group (no @fin)
+    Detected,
 }
 
 /// A row of data in a block

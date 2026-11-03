@@ -43,46 +43,72 @@ pub fn render_editor(
         return true;
     }
 
+    // Editor fills the central panel; content reflows with window size
+    ui.set_min_size(ui.available_size());
+
     ScrollArea::vertical()
         .id_salt("editor_scroll_area")
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            ui.add_space(8.0);
+            // Horizontal padding that scales slightly with width
+            let pad = (ui.available_width() * 0.02).clamp(8.0, 24.0);
+            ui.set_min_width(ui.available_width());
+            ui.add_space(pad * 0.5);
 
-            let segment_count = note.segments.len();
-            for seg_idx in 0..segment_count {
-                ui.push_id(seg_idx, |ui| {
-                    match &mut note.segments[seg_idx] {
-                        Segment::Text(t) => {
-                            if render_text_segment(ui, t) {
-                                modified = true;
-                                if check_and_auto_close_block(&mut t.text, enter_pressed) {
-                                    should_reparse = true;
+            ui.horizontal(|ui| {
+                ui.add_space(pad);
+                ui.vertical(|ui| {
+                    // Leave room for right padding
+                    let content_w = (ui.available_width() - pad).max(120.0);
+                    ui.set_max_width(content_w);
+                    ui.set_min_width(content_w);
+
+                    let segment_count = note.segments.len();
+                    for seg_idx in 0..segment_count {
+                        ui.push_id(seg_idx, |ui| {
+                            ui.set_min_width(ui.available_width());
+                            match &mut note.segments[seg_idx] {
+                                Segment::Text(t) => {
+                                    if render_text_segment(ui, t) {
+                                        modified = true;
+                                        if check_and_auto_close_block(&mut t.text, enter_pressed) {
+                                            should_reparse = true;
+                                        }
+                                    }
+                                }
+                                Segment::Block(b) => {
+                                    let block_ui_state =
+                                        editor_state.block_states.entry(seg_idx).or_default();
+                                    if render_block_segment(
+                                        ui,
+                                        b,
+                                        block_ui_state,
+                                        clipboard,
+                                        clipboard_clear_secs,
+                                        date_order,
+                                        toast_msg,
+                                    ) {
+                                        modified = true;
+                                    }
                                 }
                             }
-                        }
-                        Segment::Block(b) => {
-                            let block_ui_state = editor_state.block_states.entry(seg_idx).or_default();
-                            if render_block_segment(
-                                ui,
-                                b,
-                                block_ui_state,
-                                clipboard,
-                                clipboard_clear_secs,
-                                date_order,
-                                toast_msg,
-                            ) {
-                                modified = true;
-                            }
-                        }
+                        });
+                        ui.add_space(10.0);
+                    }
+
+                    if note.segments.is_empty() {
+                        ui.label(
+                            RichText::new(
+                                "Nota vacía. Escribe texto o usa Ctrl+Enter para insertar un bloque.",
+                            )
+                            .weak()
+                            .italics(),
+                        );
                     }
                 });
-                ui.add_space(8.0);
-            }
+            });
 
-            if note.segments.is_empty() {
-                ui.label(RichText::new("Nota vacía. Escribe texto o usa Ctrl+Enter para insertar un bloque.").weak().italics());
-            }
+            ui.add_space(pad);
         });
 
     if should_reparse {
@@ -124,7 +150,10 @@ fn check_and_auto_close_block(text: &mut String, enter_pressed: bool) -> bool {
 
     for (idx, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        if trimmed.starts_with("@tabla") || trimmed.starts_with("@registro") {
+        if trimmed.starts_with("@tabla")
+            || trimmed.starts_with("@registro")
+            || trimmed.starts_with("@lista")
+        {
             header_idx = Some(idx);
         } else if trimmed == "@fin" {
             has_fin = true;

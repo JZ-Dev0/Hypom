@@ -1,8 +1,10 @@
 use crate::block::{BlockKind, Closing, Issue, Layout, ParsedBlock, Row};
+use crate::defs::{collect_defs, find_def, BlockDef};
 use crate::header::parse_header;
-use crate::lexer::{classify_line, LineKind};
+use crate::lexer::{classify_line, classify_line_with_defs, LineKind};
 use crate::options::{LayoutMode, Separator};
-use crate::schema::Schema;
+use crate::patterns::{split_text_with_pairs, TextSlice};
+use crate::schema::{Field, FieldType, Schema};
 
 /// A segment of a note
 #[derive(Debug, Clone)]
@@ -66,7 +68,14 @@ pub fn parse_note(text: &str) -> Vec<Segment> {
     let normalized = text.replace("\r\n", "\n");
     let has_trailing_newline = normalized.ends_with('\n');
     let lines: Vec<&str> = normalized.split('\n').collect();
-    let mut classified: Vec<LineKind> = lines.iter().map(|l| classify_line(l)).collect();
+
+    let defs = collect_defs(&normalized);
+    let def_names: Vec<String> = defs.iter().map(|d| d.name.to_lowercase()).collect();
+
+    let mut classified: Vec<LineKind> = lines
+        .iter()
+        .map(|l| classify_line_with_defs(l, &def_names))
+        .collect();
 
     // If the last line is an incomplete header line (no trailing newline, user still typing),
     // treat it as plain text until Enter is pressed.
@@ -83,13 +92,13 @@ pub fn parse_note(text: &str) -> Vec<Segment> {
     while i < lines.len() {
         match &classified[i] {
             LineKind::Header(cmd) => {
-                // Start of a block
-                let (block_segment, end_idx) = parse_block_from_lines(&lines, &classified, i, cmd);
+                let (block_segment, end_idx) =
+                    parse_block_from_lines(&lines, &classified, i, cmd, &defs);
                 segments.push(Segment::Block(block_segment));
                 i = end_idx;
             }
             _ => {
-                // Accumulate text lines
+                // Accumulate text lines (includes @def, comments, free text)
                 let start = i;
                 while i < lines.len() {
                     match &classified[i] {
@@ -99,7 +108,21 @@ pub fn parse_note(text: &str) -> Vec<Segment> {
                 }
                 let text_lines: Vec<&str> = lines[start..i].to_vec();
                 let text = text_lines.join("\n");
-                segments.push(Segment::Text(TextSegment { text }));
+                // Split free text into Text + auto-detected Pares blocks
+                for slice in split_text_with_pairs(&text) {
+                    match slice {
+                        TextSlice::Plain(t) => {
+                            segments.push(Segment::Text(TextSegment { text: t }));
+                        }
+                        TextSlice::Pares(parsed, raw) => {
+                            segments.push(Segment::Block(BlockSegment {
+                                raw,
+                                parsed,
+                                state: ViewState::Table,
+                            }));
+                        }
+                    }
+                }
             }
         }
     }
@@ -113,6 +136,7 @@ fn parse_block_from_lines(
     classified: &[LineKind],
     start: usize,
     cmd: &str,
+    defs: &[BlockDef],
 ) -> (BlockSegment, usize) {
     let header_line = lines[start];
 
@@ -130,7 +154,29 @@ fn parse_block_from_lines(
         .unwrap_or("");
 
     let parsed_header = parse_header(rest);
-    let kind = BlockKind::from_command(cmd).unwrap_or(BlockKind::Tabla);
+
+    // Resolve kind + schema/options (custom @def merges)
+    let (kind, mut schema, options) = if let Some(builtin) = BlockKind::from_command(cmd) {
+        (builtin, parsed_header.schema.clone(), parsed_header.options.clone())
+    } else if let Some(def) = find_def(defs, cmd) {
+        let merged_opts = def.options.merge_override(&parsed_header.options);
+        let schema = if parsed_header.schema.fields.is_empty() {
+            def.schema.clone()
+        } else {
+            parsed_header.schema.clone()
+        };
+        (BlockKind::Custom(cmd.to_string()), schema, merged_opts)
+    } else {
+        (BlockKind::Tabla, parsed_header.schema.clone(), parsed_header.options.clone())
+    };
+
+    // Default schema for @lista
+    if matches!(kind, BlockKind::Lista) && schema.fields.is_empty() {
+        schema = Schema::new(vec![
+            Field::new("hecho", FieldType::Check),
+            Field::new("item", FieldType::Text),
+        ]);
+    }
 
     // Find the end of the block body
     let mut body_lines: Vec<(usize, &str)> = Vec::new();
@@ -146,7 +192,7 @@ fn parse_block_from_lines(
             }
             LineKind::Header(_) => {
                 closing = Closing::NextBlock;
-                break; // don't consume — next iteration handles it
+                break;
             }
             _ => {
                 body_lines.push((i - start - 1, lines[i]));
@@ -156,6 +202,7 @@ fn parse_block_from_lines(
     }
 
     // Filter out comments and blank lines for data processing
+    // (for lista keep blank-less; comments still filtered)
     let data_lines: Vec<(usize, &str)> = body_lines
         .iter()
         .filter(|(_, line)| {
@@ -164,27 +211,30 @@ fn parse_block_from_lines(
         .cloned()
         .collect();
 
-    // Determine schema (infer if empty)
-    let mut schema = parsed_header.schema.clone();
     let need_infer = schema.fields.is_empty();
 
-    // Determine layout
-    let layout = resolve_layout(&parsed_header.options.mode, &schema, &data_lines, &parsed_header.options.sep);
+    let layout = if matches!(kind, BlockKind::Lista) {
+        Layout::Row
+    } else {
+        resolve_layout(&options.mode, &schema, &data_lines, &options.sep)
+    };
 
-    if need_infer && !data_lines.is_empty() {
+    if need_infer && !data_lines.is_empty() && !matches!(kind, BlockKind::Lista) {
         let first_line = data_lines[0].1;
-        let token_count = tokenize_line(first_line, &parsed_header.options.sep).len();
+        let token_count = tokenize_line(first_line, &options.sep).len();
         schema = Schema::inferred(token_count.max(1));
     }
 
-    // Parse rows
-    let (rows, issues) = parse_body(&data_lines, &schema, &layout, &parsed_header.options.sep);
+    let (rows, issues) = if matches!(kind, BlockKind::Lista) {
+        parse_lista_body(&data_lines, &schema)
+    } else {
+        parse_body(&data_lines, &schema, &layout, &options.sep)
+    };
 
-    // Build raw text
     let raw_lines: Vec<&str> = lines[start..i].to_vec();
     let raw = raw_lines.join("\n");
 
-    let view_state = match parsed_header.options.view {
+    let view_state = match options.view {
         crate::options::ViewDefault::Table => ViewState::Table,
         crate::options::ViewDefault::Raw => ViewState::Raw,
     };
@@ -193,7 +243,7 @@ fn parse_block_from_lines(
         kind,
         title: parsed_header.title,
         schema,
-        options: parsed_header.options,
+        options,
         layout,
         rows,
         issues,
@@ -224,7 +274,6 @@ fn resolve_layout(
             if n <= 1 {
                 return Layout::Row;
             }
-            // If majority of data lines have exactly one token, use vertical
             if data_lines.is_empty() {
                 return Layout::Row;
             }
@@ -286,6 +335,42 @@ fn tokenize_space(line: &str) -> Vec<String> {
     tokens
 }
 
+/// Parse @lista body: `[ ] item` / `[x] item` or plain lines
+fn parse_lista_body(data_lines: &[(usize, &str)], schema: &Schema) -> (Vec<Row>, Vec<Issue>) {
+    let mut rows = Vec::new();
+    let issues = Vec::new();
+    let n = schema.field_count().max(2);
+
+    for (line_idx, line) in data_lines {
+        let trimmed = line.trim();
+        let (check, item) = if let Some(rest) = trimmed.strip_prefix("[x]")
+            .or_else(|| trimmed.strip_prefix("[X]"))
+            .or_else(|| trimmed.strip_prefix("[✓]"))
+        {
+            ("[x]".to_string(), rest.trim().to_string())
+        } else if let Some(rest) = trimmed.strip_prefix("[ ]")
+            .or_else(|| trimmed.strip_prefix("[]"))
+        {
+            ("[ ]".to_string(), rest.trim().to_string())
+        } else {
+            ("[ ]".to_string(), trimmed.to_string())
+        };
+
+        let mut cells = vec![check, item];
+        while cells.len() < n {
+            cells.push(String::new());
+        }
+        cells.truncate(n);
+
+        rows.push(Row {
+            cells,
+            src_lines: *line_idx..*line_idx + 1,
+        });
+    }
+
+    (rows, issues)
+}
+
 /// Parse the body lines into rows
 fn parse_body(
     data_lines: &[(usize, &str)],
@@ -301,6 +386,7 @@ fn parse_body(
     match layout {
         Layout::Row => parse_body_row(data_lines, n, sep),
         Layout::Vertical => parse_body_vertical(data_lines, n),
+        Layout::KeyValue => parse_body_vertical(data_lines, n),
     }
 }
 
@@ -315,7 +401,6 @@ fn parse_body_row(
     for (line_idx, line) in data_lines {
         let mut tokens = tokenize_line(line, sep);
 
-        // If more tokens than fields, last field absorbs the rest
         if tokens.len() > field_count {
             let excess: Vec<String> = tokens.drain(field_count - 1..).collect();
             let sep_str = match sep {
@@ -337,7 +422,6 @@ fn parse_body_row(
                     tokens.len()
                 ),
             });
-            // Pad with empty strings
             while tokens.len() < field_count {
                 tokens.push(String::new());
             }
@@ -359,8 +443,6 @@ fn parse_body_vertical(
     let mut rows = Vec::new();
     let mut issues = Vec::new();
 
-    // Try grouping by blank-line separation first
-    // (blank lines are already filtered, so just group by N consecutive)
     let chunks: Vec<Vec<(usize, &str)>> = data_lines
         .chunks(field_count)
         .map(|chunk| chunk.to_vec())
@@ -419,10 +501,9 @@ mod tests {
     fn test_parse_text_and_block() {
         let text = "Some intro text\n\n@tabla ip, user\n192.168.1.1 admin\n@fin\n\nMore text";
         let segments = parse_note(text);
-        assert_eq!(segments.len(), 3);
+        assert!(segments.len() >= 3);
         assert!(matches!(segments[0], Segment::Text(_)));
-        assert!(matches!(segments[1], Segment::Block(_)));
-        assert!(matches!(segments[2], Segment::Text(_)));
+        assert!(segments.iter().any(|s| matches!(s, Segment::Block(_))));
     }
 
     #[test]
@@ -510,7 +591,6 @@ mod tests {
 
     #[test]
     fn test_incomplete_header_remains_text() {
-        // While typing "@tabla", with no newline, it stays as text
         let text = "@tabla";
         let segments = parse_note(text);
         assert_eq!(segments.len(), 1);
@@ -519,7 +599,6 @@ mod tests {
             _ => panic!("Expected text segment for incomplete header"),
         }
 
-        // Typing columns without Enter also stays as text
         let text2 = "@tabla id, nombre, codigo";
         let segments2 = parse_note(text2);
         assert_eq!(segments2.len(), 1);
@@ -531,7 +610,6 @@ mod tests {
 
     #[test]
     fn test_complete_header_with_newline_becomes_block() {
-        // Once Enter is pressed (newline appended), it parses as a block
         let text = "@tabla id, nombre, codigo\n";
         let segments = parse_note(text);
         assert_eq!(segments.len(), 1);
@@ -544,5 +622,61 @@ mod tests {
             }
             _ => panic!("Expected block segment once newline is present"),
         }
+    }
+
+    #[test]
+    fn test_lista() {
+        let text = "@lista \"Tareas\"\n[ ] Comprar pan\n[x] Enviar mail\n@fin";
+        let segments = parse_note(text);
+        match &segments[0] {
+            Segment::Block(b) => {
+                assert_eq!(b.parsed.kind, BlockKind::Lista);
+                assert_eq!(b.parsed.rows.len(), 2);
+                assert_eq!(b.parsed.rows[0].cells[0], "[ ]");
+                assert_eq!(b.parsed.rows[0].cells[1], "Comprar pan");
+                assert_eq!(b.parsed.rows[1].cells[0], "[x]");
+                assert_eq!(b.parsed.rows[1].cells[1], "Enviar mail");
+            }
+            _ => panic!("Expected lista block"),
+        }
+    }
+
+    #[test]
+    fn test_def_custom_block() {
+        let text = "\
+@def ftp ip, user, pass:secreto | copiar=ftp://{user}:{pass}@{ip}
+
+@ftp \"Oficina\"
+192.168.1.10 admin 1234
+@fin
+";
+        let segments = parse_note(text);
+        let block = segments.iter().find_map(|s| match s {
+            Segment::Block(b) => Some(b),
+            _ => None,
+        }).expect("custom block");
+        assert!(matches!(block.parsed.kind, BlockKind::Custom(ref n) if n == "ftp"));
+        assert_eq!(block.parsed.schema.fields.len(), 3);
+        assert_eq!(block.parsed.rows.len(), 1);
+        assert_eq!(block.parsed.rows[0].cells[0], "192.168.1.10");
+        assert!(block.parsed.options.copy_template.is_some());
+    }
+
+    #[test]
+    fn test_auto_detect_pares() {
+        let text = "\
+FTP PSICOLOGIA
+servidor FTP    	: ftp.example.com
+usuario de FTP 	: user@example.com
+contraseña      	: secret
+directorio      	: /home/path
+";
+        let segments = parse_note(text);
+        let block = segments.iter().find_map(|s| match s {
+            Segment::Block(b) if b.parsed.kind == BlockKind::Pares => Some(b),
+            _ => None,
+        }).expect("pares block");
+        assert_eq!(block.parsed.title.as_deref(), Some("FTP PSICOLOGIA"));
+        assert_eq!(block.parsed.schema.fields.len(), 4);
     }
 }

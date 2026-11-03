@@ -8,3 +8,5 @@ pub mod serialize;
 pub mod dates;
 pub mod template;
 pub mod ops;
+pub mod patterns;
+pub mod defs;

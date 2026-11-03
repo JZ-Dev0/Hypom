@@ -15,27 +15,32 @@ pub enum LineKind {
     Escaped,
 }
 
-/// Known block commands (v1)
-pub const BLOCK_COMMANDS: &[&str] = &["tabla", "registro"];
+/// Known built-in block commands
+pub const BLOCK_COMMANDS: &[&str] = &["tabla", "registro", "lista"];
 
-/// Known line commands (v1)
+/// Known line commands
 pub const LINE_COMMANDS: &[&str] = &["fin", "//", "def"];
 
-/// All known commands
+/// All known built-in commands
 pub fn is_known_command(name: &str) -> bool {
     let lower = name.to_lowercase();
     BLOCK_COMMANDS.iter().any(|c| *c == lower)
         || LINE_COMMANDS.iter().any(|c| *c == lower)
 }
 
-/// Returns true if the command name is a block-opening command
+/// Returns true if the command name is a built-in block-opening command
 pub fn is_block_command(name: &str) -> bool {
     let lower = name.to_lowercase();
     BLOCK_COMMANDS.iter().any(|c| *c == lower)
 }
 
-/// Classify a single line
+/// Classify a single line (built-ins only; custom `@def` names need `classify_line_with_defs`)
 pub fn classify_line(line: &str) -> LineKind {
+    classify_line_with_defs(line, &[])
+}
+
+/// Classify a line, treating `custom_defs` names as block headers
+pub fn classify_line_with_defs(line: &str, custom_defs: &[String]) -> LineKind {
     // Must start with @ at position 0
     if !line.starts_with('@') {
         // Check for escaped @
@@ -67,6 +72,9 @@ pub fn classify_line(line: &str) -> LineKind {
         "fin" => LineKind::End,
         "def" => LineKind::Def,
         _ if BLOCK_COMMANDS.iter().any(|c| *c == cmd_lower) => {
+            LineKind::Header(cmd.to_string())
+        }
+        _ if custom_defs.iter().any(|d| d.eq_ignore_ascii_case(&cmd_lower)) => {
             LineKind::Header(cmd.to_string())
         }
         _ => {

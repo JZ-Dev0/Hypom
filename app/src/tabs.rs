@@ -1,5 +1,6 @@
-use egui::{Color32, RichText, Ui};
+use egui::{Color32, RichText, ScrollArea, Ui};
 use hypom_storage::LoadedNote;
+use crate::icons;
 
 pub struct TabAction {
     pub select_tab: Option<usize>,
@@ -18,40 +19,70 @@ pub fn render_tabs(
         new_note: false,
     };
 
+    ui.set_min_width(ui.available_width());
+
     ui.horizontal(|ui| {
-        for (i, note) in open_notes.iter().enumerate() {
-            let is_active = active_idx == Some(i);
-            let mut title = note.title();
-            if note.dirty {
-                title.push('•');
-            }
-
-            let text = if is_active {
-                RichText::new(&title).strong().color(Color32::from_rgb(100, 180, 255))
-            } else {
-                RichText::new(&title)
-            };
-
-            ui.push_id(i, |ui| {
-                ui.group(|ui| {
-                    ui.horizontal(|ui| {
-                        if ui.selectable_label(is_active, text).clicked() {
-                            action.select_tab = Some(i);
+        // Tabs scroll horizontally when the window is narrow or there are many open notes
+        ScrollArea::horizontal()
+            .id_salt("tabs_scroll_area")
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for (i, note) in open_notes.iter().enumerate() {
+                        let is_active = active_idx == Some(i);
+                        let mut title = note.title();
+                        if note.dirty {
+                            title.push('•');
                         }
 
-                        if ui.small_button("✕").clicked() {
-                            action.close_tab = Some(i);
-                        }
-                    });
+                        // Truncate very long titles so tabs stay usable
+                        let display = if title.chars().count() > 28 {
+                            let truncated: String = title.chars().take(26).collect();
+                            format!("{}…", truncated)
+                        } else {
+                            title.clone()
+                        };
+
+                        let text = if is_active {
+                            RichText::new(&display)
+                                .strong()
+                                .color(Color32::from_rgb(100, 180, 255))
+                        } else {
+                            RichText::new(&display)
+                        };
+
+                        ui.push_id(i, |ui| {
+                            ui.group(|ui| {
+                                ui.horizontal(|ui| {
+                                    let tab = ui
+                                        .selectable_label(is_active, text)
+                                        .on_hover_text(&title);
+                                    if tab.clicked() {
+                                        action.select_tab = Some(i);
+                                    }
+
+                                    if ui
+                                        .small_button(icons::X)
+                                        .on_hover_text("Cerrar")
+                                        .clicked()
+                                    {
+                                        action.close_tab = Some(i);
+                                    }
+                                });
+                            });
+                        });
+                    }
                 });
             });
-        }
 
-        if ui.button("+").on_hover_text("Nueva nota").clicked() {
+        if ui
+            .button(icons::PLUS)
+            .on_hover_text("Nueva nota")
+            .clicked()
+        {
             action.new_note = true;
         }
     });
 
     action
 }
-

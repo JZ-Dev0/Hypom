@@ -1,22 +1,70 @@
-Servidores de la oficina — actualizado en noviembre
+FTPs SIE 2026 — acceso por áreas
 
-@// datos de acceso importantes
-@registro "FTP oficina" ip, user, pass:secreto | orden=pass | copiar=ftp://{user}:{pass}@{ip}
-192.168.1.10 admin 1234
-10.0.0.5 root abcd
+@// Plantilla reutilizable (v1.1)
+@def ftp servidor, usuario:email, contraseña:secreto, directorio | copiar=ftp://{usuario}:{contraseña}@{servidor}
+
+@ftp "FTP PSICOLOGIA"
+ftp.iepcristoreydesanjose.edu.pe
+sie-psicologia@iepcristoreydesanjose.edu.pe
+passwordgeneric
+/home/admcrey/public_html/sie-net/2026/sie-psicologia
 @fin
 
-Claves en formato vertical:
+@ftp "FTP MATRICULA"
+sie-matricula@iepcristoreydesanjose.edu.pe
+passwordgeneric
+/home/admcrey/public_html/sie-net/2026/sie-matricula
 
-@registro "Router Principal" ip, user, pass | modo=vertical
-192.168.0.1
-admin
-router2026
 
-192.168.0.2
-admin
-repetidor
 @fin
 
-Fin de las notas de servidores.
+@ftp "FTP ENFERMERIA"
+ftp.iepcristoreydesanjose.edu.pe
+sie-enfermeria@iepcristoreydesanjose.edu.pe
+passwordgeneric
+/home/admcrey/public_html/sie-net/2026/sie-enfermeria
+@fin
 
+También se detectan pares clave:valor SIN etiqueta @ (pega texto del Bloc de notas):
+
+FTP CSS
+servidor FTP    	: ftp.iepcristoreydesanjose.edu.pe
+usuario de FTP 	: css@iepcristoreydesanjose.edu.pe
+contraseña      	: passwordgeneric
+directorio      	: /home/admcrey/public_html/sie-net/2026/css
+FTP JAVASCRIPT
+servidor FTP    	: ftp.iepcristoreydesanjose.edu.pe
+usuario de FTP 	: javascript@iepcristoreydesanjose.edu.pe
+contraseña      	: jpasswordgeneric
+directorio      	: /home/admcrey/public_html/sie-net/2026/javascript
+FTP LMS - INTRANET
+servidor FTP    	: ftp.iepcristoreydesanjose.edu.pe
+usuario de FTP 	: sie-calendario@iepcristoreydesanjose.edu.pe
+contraseña      	: passwordgeneric
+directorio      	: /home/admcrey/public_html/sie-net/2026/sie-calendario
+FTP SUPERVISIÓN
+servidor FTP    	: ftp.iepcristoreydesanjose.edu.pe
+usuario de FTP 	: sie-intranet@iepcristoreydesanjose.edu.pe
+contraseña      	: passwordgeneric
+directorio      	: /home/admcrey/public_html/sie-net/2026/sie-intranet
+FTP COMUNICADOS
+servidor FTP    	: ftp.iepcristoreydesanjose.edu.pe
+usuario de FTP 	: sie-comunicados@iepcristoreydesanjose.edu.pe
+contraseña      	: passwordgeneric
+directorio      	: /home/admcrey/public_html/sie-net/2026/sie-comunicados
+FTP EXTRANET
+servidor FTP    	: ftp.iepcristoreydesanjose.edu.pe
+usuario de FTP 	: sie-extranet@iepcristoreydesanjose.edu.pe
+contraseña      	: passwordgeneric
+directorio      	: /home/admcrey/public_html/sie-net/2026/sie-extranet
+@lista "Pendientes de despliegue"
+[x] Revisar cuota FTP CSS
+[x] Rotar clave de JavaScript
+[x] Documentar rutas 2026
+@fin
+
+@tabla "Vencimientos SSL" dominio, vence:fecha | orden=vence cercana | alerta=vence<30d | filtro=dominio~sie
+sie-psicologia.ejemplo.edu.pe 15/11
+sie-matricula.ejemplo.edu.pe 03/12
+portal.ejemplo.edu.pe 28/10
+@fin

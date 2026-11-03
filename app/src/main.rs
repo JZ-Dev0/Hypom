@@ -3,6 +3,7 @@
 mod block_view;
 mod clipboard;
 mod editor;
+mod icons;
 mod palette;
 mod sidebar;
 mod state;
@@ -22,7 +23,11 @@ struct HypomApp {
 }
 
 impl HypomApp {
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let mut fonts = egui::FontDefinitions::default();
+        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        cc.egui_ctx.set_fonts(fonts);
+
         Self {
             state: AppState::new(),
         }
@@ -74,8 +79,11 @@ impl eframe::App for HypomApp {
             }
         }
 
-        // Top bar (tabs)
-        TopBottomPanel::top("top_panel").show(ctx, |ui| {
+        // Top bar (tabs) — height grows a bit if needed; tabs scroll horizontally
+        TopBottomPanel::top("top_panel")
+            .resizable(false)
+            .exact_height(36.0)
+            .show(ctx, |ui| {
             let active_idx = self.state.active_note_idx;
             let tab_action = render_tabs(ui, &self.state.open_notes, active_idx);
 
@@ -93,10 +101,16 @@ impl eframe::App for HypomApp {
         });
 
         // Bottom status bar
-        TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
+        TopBottomPanel::bottom("bottom_panel")
+            .resizable(false)
+            .exact_height(28.0)
+            .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if let Some((msg, _)) = &self.state.toast {
-                    ui.label(RichText::new(format!("ℹ {}", msg)).color(Color32::from_rgb(130, 220, 150)));
+                    ui.label(
+                        RichText::new(format!("{} {}", icons::INFO, msg))
+                            .color(Color32::from_rgb(130, 220, 150)),
+                    );
                 } else if let Some(idx) = self.state.active_note_idx {
                     if let Some(note) = self.state.open_notes.get(idx) {
                         let eol_str = match note.eol {
@@ -104,25 +118,42 @@ impl eframe::App for HypomApp {
                             hypom_core::parse::Eol::CrLf => "CRLF",
                         };
                         let dirty_str = if note.dirty { "Modificado" } else { "Guardado" };
-                        ui.label(RichText::new(format!("{} | {} | UTF-8", dirty_str, eol_str)).weak().size(12.0));
+                        ui.label(
+                            RichText::new(format!("{} | {} | UTF-8", dirty_str, eol_str))
+                                .weak()
+                                .size(12.0),
+                        );
                     }
                 } else {
-                    ui.label(RichText::new("Hypom — Bloc de notas con bloques estructurados").weak().size(12.0));
+                    ui.label(
+                        RichText::new("Hypom — Bloc de notas con bloques estructurados")
+                            .weak()
+                            .size(12.0),
+                    );
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button(if self.state.sidebar_visible { "◨ Barra lateral" } else { "◧ Barra lateral" }).clicked() {
+                    let sb_icon = if self.state.sidebar_visible {
+                        icons::SIDEBAR_SIMPLE
+                    } else {
+                        icons::SIDEBAR
+                    };
+                    if ui
+                        .small_button(format!("{} Barra lateral", sb_icon))
+                        .clicked()
+                    {
                         self.state.sidebar_visible = !self.state.sidebar_visible;
                     }
                 });
             });
         });
 
-        // Sidebar
+        // Sidebar — resizable; width adapts within range as the window changes
         if self.state.sidebar_visible {
             SidePanel::left("sidebar_panel")
-                .default_width(220.0)
-                .width_range(160.0..=360.0)
+                .resizable(true)
+                .default_width(240.0)
+                .width_range(160.0..=420.0)
                 .show(ctx, |ui| {
                     let active_path = self.state.active_note_idx
                         .and_then(|idx| self.state.open_notes.get(idx))
@@ -189,7 +220,10 @@ impl eframe::App for HypomApp {
                         ui.add_space(8.0);
                         ui.label(RichText::new("Abre una nota desde la barra lateral o crea una nueva con Ctrl+N").weak());
                         ui.add_space(12.0);
-                        if ui.button("+ Nueva Nota").clicked() {
+                        if ui
+                            .button(format!("{} Nueva Nota", icons::NOTE_PENCIL))
+                            .clicked()
+                        {
                             self.state.new_note_dialog = Some(None);
                             self.state.new_note_input.clear();
                             self.state.dialog_just_opened = true;
@@ -341,7 +375,7 @@ fn main() -> eframe::Result {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1100.0, 750.0])
-            .with_min_inner_size([600.0, 400.0])
+            .with_min_inner_size([480.0, 320.0])
             .with_title("Hypom"),
         ..Default::default()
     };

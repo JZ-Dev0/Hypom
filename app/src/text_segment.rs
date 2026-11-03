@@ -36,9 +36,12 @@ pub fn render_text_segment(ui: &mut Ui, segment: &mut TextSegment) -> bool {
         ui.fonts(|f| f.layout_job(job))
     };
 
+    ui.set_min_width(ui.available_width());
+
     let response = ui.add(
         TextEdit::multiline(&mut segment.text)
             .desired_width(f32::INFINITY)
+            .desired_rows(2)
             .layouter(&mut layouter)
             .frame(false),
     );

@@ -2,7 +2,7 @@
 
 **Bloc de notas de escritorio, rápido, liviano y de archivos planos con soporte para bloques estructurados.**
 
-Hypom permite escribir texto libre e intercalar bloques estructurados con notación `@` (`@tabla`, `@registro`) que se visualizan como tablas interactivas. El archivo en disco sigue siendo siempre texto plano legible en cualquier editor.
+Hypom permite escribir texto libre e intercalar bloques estructurados con notación `@` (`@tabla`, `@registro`, `@lista`, `@def`) que se visualizan como tablas interactivas. También detecta grupos `clave : valor` pegados desde un bloc de notas clásico, sin necesidad de etiquetas `@`. El archivo en disco sigue siendo siempre texto plano legible en cualquier editor.
 
 ---
 
@@ -12,10 +12,14 @@ Hypom permite escribir texto libre e intercalar bloques estructurados con notaci
 - **Bloques estructurados**:
   - `@tabla`: Listas tabulares con columnas tipadas, ordenamiento y edición rápida.
   - `@registro`: Pares y grupos de datos (credenciales, configuraciones, conexiones).
+  - `@lista`: Checklists con `[ ]` / `[x]`.
+  - `@def`: Tipos reutilizables por nota (`@def ftp …` → `@ftp "Oficina"`).
   - Vistas duales: Alterna al instante entre **Tabla** y modo **Crudo (Texto)** con `[</>]`.
+- **Detección de pares sin `@`**: Grupos con título + líneas `clave : valor` (estilo Bloc de notas) se proyectan como tarjetas editables.
+- **Opciones v1.1**: `filtro=campo~texto`, `alerta=campo<7d`, `total=campo`, `unico=campo`, `colapsado`.
 - **Tipos de campos**:
-  - `texto`, `numero`, `fecha` (con orden cronológico o por cercanía a hoy), `secreto`, `url`, `email`.
-  - Detección automática de campos secretos (`pass`, `password`, `clave`, `token`, etc.).
+  - `texto`, `numero`, `fecha`, `secreto`, `url`, `email`, `check`.
+  - Detección automática de campos secretos (`pass`, `password`, `contraseña`, `clave`, `token`, etc.).
 - **Persistencia inteligente y segura**:
   - Autoguardado atómico con debounce de 800 ms.
   - Detección y conservación estricta de saltos de línea originales (`LF` o `CRLF`).
@@ -33,20 +37,31 @@ Hypom permite escribir texto libre e intercalar bloques estructurados con notaci
 ## 📌 Ejemplo de Nota
 
 ```text
-Servidores de la oficina
+@def ftp servidor, usuario:email, contraseña:secreto, directorio | copiar=ftp://{usuario}:{contraseña}@{servidor}
 
-@// Credenciales protegidas
-@registro "FTP oficina" ip, user, pass:secreto | orden=ip | copiar=ftp://{user}:{pass}@{ip}
-192.168.1.10 admin 1234
-10.0.0.5 root abcd
+@ftp "FTP PSICOLOGIA"
+ftp.ejemplo.edu.pe
+sie-psicologia@ejemplo.edu.pe
+secret
+/home/.../sie-psicologia
 @fin
 
-Correos por vencer:
+También sin @ (pega tal cual del Bloc de notas):
 
-@tabla "Vencimientos" correo:email, vence:fecha | orden=vence cercana
+FTP CSS
+servidor FTP    	: ftp.ejemplo.edu.pe
+usuario de FTP 	: css@ejemplo.edu.pe
+contraseña      	: secret
+directorio      	: /home/.../css
+
+@lista "Pendientes"
+[ ] Revisar cuota
+[x] Rotar clave
+@fin
+
+@tabla "Vencimientos" correo:email, vence:fecha | orden=vence cercana | alerta=vence<30d
 test@gmail.com 12/11
 ana@gmail.com 03/12
-luis@gmail.com 28/10
 @fin
 ```
 

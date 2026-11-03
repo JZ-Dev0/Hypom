@@ -43,8 +43,16 @@ impl fmt::Display for FieldType {
 
 /// Names that auto-detect as secret type
 const SECRET_NAMES: &[&str] = &[
-    "pass", "password", "contra", "contraseña", "clave", "token", "secret", "pin",
+    "pass", "password", "contra", "contraseña", "contrasena", "clave", "token", "secret", "pin",
 ];
+
+/// Returns true if the field name should be treated as secret by default
+pub fn is_secret_name(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    SECRET_NAMES.iter().any(|s| {
+        lower == *s || lower.contains(s)
+    })
+}
 
 /// A single field definition
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,7 +70,7 @@ impl Field {
     pub fn new_auto(name: impl Into<String>, explicit_ty: Option<FieldType>) -> Self {
         let name = name.into();
         let ty = explicit_ty.unwrap_or_else(|| {
-            if SECRET_NAMES.iter().any(|s| s.eq_ignore_ascii_case(&name)) {
+            if is_secret_name(&name) {
                 FieldType::Secret
             } else {
                 FieldType::Text

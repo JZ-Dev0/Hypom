@@ -1,0 +1,24 @@
+@tabla id, numbrer, serie
+1 3 44
+@fin
+
+@tabla id, casa, casas
+"" "" ""
+"" "" ""
+@fin
+1 dsd dsa
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

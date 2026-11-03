@@ -1,5 +1,6 @@
 nombre = "Servidores y Claves"
 color  = "#4f8cff"
-icono  = "🖥"
+# Alias Phosphor: folder | server | note | list | lock | search | table
+# También acepta emojis legacy (🖥 → hard drives)
+icono  = "server"
 orden  = 1
-
